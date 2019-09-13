@@ -1,5 +1,3 @@
-package main;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,9 +47,9 @@ public class Main {
 
         @Override
         public void run() {
-            this.mutex.lock();
+            // this.mutex.lock();
             counts();
-            this.mutex.unlock();
+            // this.mutex.unlock();
         }
 
         private void counts() {
