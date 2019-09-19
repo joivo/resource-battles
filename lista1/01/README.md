@@ -10,7 +10,7 @@ Sua implementação não pode:
 
     - usar os métodos wait, notify e notifyAll da classe Object. 
     - usar synchronized na declaração de nenhum método criado por você. 
-    - usar nenhum objeto do pacote java.util.concurrent exceto java.util.concurrent.locks.LockSupport.park() para bloquear a
-    execução da Thread corrente e java.util.concurrent.locks.LockSupport.unpark(Thread thread) para desbloquear.
+    - usar nenhum objeto do pacote java.util.concurrent <strong> exceto </strong> java.util.concurrent.locks.LockSupport.park() 
+    para bloquear a execução da Thread corrente e java.util.concurrent.locks.LockSupport.unpark(Thread thread) para desbloquear.
 
 Use ArrayList para implementar a fila.
