@@ -9,17 +9,22 @@ public class Main {
     private static int sharedCount = 0;
 
     public static void main(String... args) {
-        final String usage = "usage:\nsh run <max_counter> <n_threads>\n";
+        final String usage = "usage:\nsh run <iterations> <n_threads> <counter_value>\n";
 
         if (validateArgs(args)) {
-            if (args.length != 2) {
+            if (args.length != 3) {
                 log(usage);
             } else {
-                int seed = Integer.parseInt(args[0]);
+                int iterations = Integer.parseInt(args[0]);  
                 int nThreads = Integer.parseInt(args[1]);
+                int seed = Integer.parseInt(args[2]);
                 int expected = seed * nThreads;
-                log(String.format("Expected: %d\n", expected));
-                log(String.format("Result: %d\n", testMutualExclusion(expected, seed, nThreads)));
+                
+                for (int i = 0; i < iterations; i++) {                    
+                    log(String.format("Expected: %d\n", expected));
+                    log(String.format("Result: %d\n", testMutualExclusion(expected, seed, nThreads)));
+                }
+
                 System.exit(0);
             }
         } else {
