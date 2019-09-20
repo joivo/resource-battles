@@ -1,124 +1,158 @@
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 public class Main {
 
+    private final static Mutex mutex = new Mutex();
+    private static int sharedCount = 0;
+
     public static void main(String... args) {
-        int count = 0;
-        final int maxValue = 100000;
+        final String usage = "usage:\nsh run <max_counter> <n_threads>\n";
 
-        Counter firstCounter = new Counter(count, "c0",maxValue);
-        Counter secondCounter = new Counter(count, "c1",maxValue);
-        Counter thirdCounter = new Counter(count, "c2",maxValue);
-
-        Thread t0 = new Thread(firstCounter, "thread-c0");
-        Thread t1 = new Thread(secondCounter, "thread-c1");
-        Thread t2 = new Thread(thirdCounter, "thread-c2");
-
-        t0.start();
-        t1.start();
-        t2.start();
-
-        try {
-            t0.join();
-            t1.join();
-            t2.join();
-
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (validateArgs(args)) {
+            if (args.length != 2) {
+                log(usage);
+            } else {
+                int seed = Integer.parseInt(args[0]);
+                int nThreads = Integer.parseInt(args[1]);
+                int expected = seed * nThreads;
+                log(String.format("Expected: %d\n", expected));
+                log(String.format("Result: %d\n", testMutualExclusion(expected, seed, nThreads)));
+                System.exit(0);
+            }
+        } else {
+            log(usage);
+            System.exit(1);
         }
     }
 
-    static class Counter implements Runnable {
+    private static int testMutualExclusion(int expected, int seed, int nThreads) {
+        List<Thread> threads = new ArrayList<>();
 
-        private int count;
-        private String counterId;
-        private Mutex mutex;
-        private int maxValue;
+        for (int i = 0; i < nThreads; i++) {
+            threads.add(new Counter(seed));
+        }
 
-        Counter(int count, String counterId, int maxValue) {
-            this.mutex = new Mutex();
-            this.count = count;
-            this.counterId = counterId;
+        for (int i = 0; i < nThreads; i++) {
+            threads.get(i).start();
+        }
+
+        for (int i = 0; i < nThreads; i++) {
+            try {
+                threads.get(i).join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        int current = sharedCount;
+        sharedCount = 0;
+        assert current == expected;
+        return current;
+    }
+
+    private static void log(String str) {
+        System.out.print(str);
+    }
+
+    static boolean validateArgs(String... args) {
+        return args.length > 0 && validateIntLimits(args);
+
+    }
+
+    static boolean validateIntLimits(String ...args) {
+        boolean result = true;
+        for (String s : args) {
+            if (Integer.parseInt(s) >= Integer.MAX_VALUE ||
+                    Integer.parseInt(s) <= Integer.MIN_VALUE) {
+                result = false;
+                break;
+            }
+        }
+        return result;
+    }
+
+    static class Counter extends Thread {
+        private final int maxValue;
+
+        Counter(int maxValue) {
             this.maxValue = maxValue;
         }
 
         @Override
         public void run() {
-            // this.mutex.lock();
-            counts();
-            // this.mutex.unlock();
-        }
-
-        private void counts() {
-            log("The value of the shared variable is: " +
-                    this.count + "to the counter with id: " + counterId);
-            for (int i = 0; i <= this.maxValue; i++) {
-                this.count++;
+            mutex.lock(this);
+            for (int i = 0; i < maxValue; i++) {
+                sharedCount++;
             }
+            mutex.unlock(this);
         }
     }
 
     static class Mutex {
-        private Queue waiters; // that should be enough to guarantee fairness
-        private AtomicBoolean flag;
+        private Queue<Thread> waiters; // that should be enough to guarantee fairness
+        private AtomicInteger flag;
+        private AtomicInteger guard;
 
         Mutex() {
-            this.flag = new AtomicBoolean(false);
-            this.waiters = new Queue();
+            this.flag = new AtomicInteger(0);
+            this.guard = new AtomicInteger(0);
+            this.waiters = new Queue<>();
         }
 
-        void lock() {
-            boolean interrupted = false;
-            Thread current = Thread.currentThread();
-            this.waiters.enqueue(current);
-
-            Thread head = this.waiters.peek();
-
-            while ( (head != current) || flag.compareAndSet(false, true)) {
-                    LockSupport.park(this);
-                    if (Thread.interrupted()) interrupted = true;
+        void lock(Thread t) {
+            while (guard.getAndSet(1) == 1) {
+                // if here, so spinning
             }
 
-            this.waiters.take();
+            if (flag.get() == 0) {
+                flag.set(1); // lock acquired
+                guard.set(0);
+            } else {
+                waiters.enqueue(t);
+                guard.set(0);
+                LockSupport.park();
+            }
 
-            if (interrupted) current.interrupt();
         }
 
-        void unlock() {
-            flag.set(false);
-            LockSupport.unpark(this.waiters.peek());
+        void unlock(Thread t) {
+            while (guard.getAndSet(1) == 1) {
+                // spinning...
+            }
+
+            if (waiters.isEmpty())
+                flag.set(0);
+            else
+                LockSupport.unpark(waiters.take());
+
+            guard.set(0);
         }
     }
 
-    static class Queue {
-        private List<Thread> queue;
+    static class Queue<T> {
+        private List<T> queue;
 
         Queue() {
             this.queue = new ArrayList<>();
         }
 
-        // enqueue a new thread
-        void enqueue(Thread t) {
+        void enqueue(T t) {
             this.queue.add(t);
         }
 
-        // just show the head
-        Thread peek() {
+        T peek() {
             return this.queue.get(0);
         }
 
-        // remove and returns
-        Thread take() {
-            Thread head = this.queue.get(0);
-            this.queue.remove(0);
-            return head;
+        T take() {
+            return this.queue.remove(0);
         }
-    }
 
-    private static void log(String str) {
-        System.out.println(str);
+        boolean isEmpty() {
+            return this.queue.size() == 0;
+        }
     }
 }
