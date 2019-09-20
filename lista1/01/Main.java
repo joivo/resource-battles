@@ -6,29 +6,43 @@ import java.util.concurrent.locks.LockSupport;
 public class Main {
 
     private static int sharedCount = 0;
-    private static Mutex mutex = new Mutex();
+    private final static Mutex mutex = new Mutex();
 
     public static void main(String... args) throws InterruptedException {
-        final int maxValue = 1000;
+        // expected 200000;
+        log(String.format("Expected: %d\n", 200000));
+        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 10000, 20)));
 
-        Thread c0 = new Counter(maxValue);
-        Thread c1 = new Counter(maxValue);
-        Thread c2 = new Counter(maxValue);
+        // expected 20000000;
+        log(String.format("Expected: %d\n", 20000000));
+        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 100000, 200)));
 
-        c0.start();
-        c1.start();
-        c2.start();
-
-        c0.join();
-        c1.join();
-        c2.join();
-
-        log(String.format("Expected: %d\n", maxValue * 3));
-        log(String.format("Result: %d\n", sharedCount));
+        // expected 2000000000;
+        log(String.format("Expected: %d\n", 2000000000));
+        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 1000000, 2000)));
     }
 
-    private static void log(String str) {
-        System.out.print(str);
+    private static int testMutualExclusion(int current, int maxValue, int nThreads) {
+        int expected = maxValue * nThreads;
+        List<Thread> threads = new ArrayList<>();
+
+        for (int i = 0; i < nThreads; i++) {
+            threads.add(new Counter(maxValue));
+        }
+
+        for (int i = 0; i < nThreads; i++) {
+            threads.get(i).start();
+        }
+
+        for (int i = 0; i < nThreads; i++) {
+            try {
+                threads.get(i).join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        assert current == expected;
+        return expected;
     }
 
     static class Counter extends Thread {
@@ -41,11 +55,9 @@ public class Main {
         @Override
         public void run() {
             mutex.lock(this);
-            log(String.format("Initial counter value %s\n", sharedCount));
             for (int i = 0; i < maxValue; i++) {
                 sharedCount++;
             }
-            log(String.format("Final result for the counter %s is %d\n", this.getName(), sharedCount));
             mutex.unlock(this);
         }
     }
@@ -102,7 +114,6 @@ public class Main {
             this.queue.add(t);
         }
 
-        // just show the head
         T peek() {
             return this.queue.get(0);
         }
@@ -111,8 +122,12 @@ public class Main {
             return this.queue.remove(0);
         }
 
-        public boolean isEmpty() {
+        boolean isEmpty() {
             return this.queue.size() == 0;
         }
+    }
+
+    private static void log(String str) {
+        System.out.print(str);
     }
 }
