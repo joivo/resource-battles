@@ -9,20 +9,18 @@ public class Main {
     private final static Mutex mutex = new Mutex();
 
     public static void main(String... args) throws InterruptedException {
-        // expected 200000;
+
         log(String.format("Expected: %d\n", 200000));
-        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 10000, 20)));
-
-        // expected 20000000;
+        log(String.format("Result: %d\n", testMutualExclusion( 10000, 20)));
+        
         log(String.format("Expected: %d\n", 20000000));
-        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 100000, 200)));
+        log(String.format("Result: %d\n", testMutualExclusion( 100000, 200)));
 
-        // expected 2000000000;
         log(String.format("Expected: %d\n", 2000000000));
-        log(String.format("Result: %d\n", testMutualExclusion(sharedCount, 1000000, 2000)));
+        log(String.format("Result: %d\n", testMutualExclusion( 1000000, 2000)));
     }
 
-    private static int testMutualExclusion(int current, int maxValue, int nThreads) {
+    private static int testMutualExclusion(int maxValue, int nThreads) {
         int expected = maxValue * nThreads;
         List<Thread> threads = new ArrayList<>();
 
@@ -41,8 +39,11 @@ public class Main {
                 e.printStackTrace();
             }
         }
+
+        int current = sharedCount;
+        sharedCount = 0;
         assert current == expected;
-        return expected;
+        return current;
     }
 
     static class Counter extends Thread {
