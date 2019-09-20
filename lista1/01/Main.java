@@ -5,27 +5,34 @@ import java.util.concurrent.locks.LockSupport;
 
 public class Main {
 
-    private static int sharedCount = 0;
     private final static Mutex mutex = new Mutex();
+    private static int sharedCount = 0;
 
-    public static void main(String... args) throws InterruptedException {
+    public static void main(String... args) {
+        final String usage = "usage:\nsh run <max_counter> <n_threads>\n";
 
-        log(String.format("Expected: %d\n", 200000));
-        log(String.format("Result: %d\n", testMutualExclusion( 10000, 20)));
-        
-        log(String.format("Expected: %d\n", 20000000));
-        log(String.format("Result: %d\n", testMutualExclusion( 100000, 200)));
-
-        log(String.format("Expected: %d\n", 2000000000));
-        log(String.format("Result: %d\n", testMutualExclusion( 1000000, 2000)));
+        if (validateArgs(args)) {
+            if (args.length != 2) {
+                log(usage);
+            } else {
+                int seed = Integer.parseInt(args[0]);
+                int nThreads = Integer.parseInt(args[1]);
+                int expected = seed * nThreads;
+                log(String.format("Expected: %d\n", expected));
+                log(String.format("Result: %d\n", testMutualExclusion(expected, seed, nThreads)));
+                System.exit(0);
+            }
+        } else {
+            log(usage);
+            System.exit(1);
+        }
     }
 
-    private static int testMutualExclusion(int maxValue, int nThreads) {
-        int expected = maxValue * nThreads;
+    private static int testMutualExclusion(int expected, int seed, int nThreads) {
         List<Thread> threads = new ArrayList<>();
 
         for (int i = 0; i < nThreads; i++) {
-            threads.add(new Counter(maxValue));
+            threads.add(new Counter(seed));
         }
 
         for (int i = 0; i < nThreads; i++) {
@@ -44,6 +51,27 @@ public class Main {
         sharedCount = 0;
         assert current == expected;
         return current;
+    }
+
+    private static void log(String str) {
+        System.out.print(str);
+    }
+
+    static boolean validateArgs(String... args) {
+        return args.length > 0 && validateIntLimits(args);
+
+    }
+
+    static boolean validateIntLimits(String ...args) {
+        boolean result = true;
+        for (String s : args) {
+            if (Integer.parseInt(s) >= Integer.MAX_VALUE ||
+                    Integer.parseInt(s) <= Integer.MIN_VALUE) {
+                result = false;
+                break;
+            }
+        }
+        return result;
     }
 
     static class Counter extends Thread {
@@ -126,9 +154,5 @@ public class Main {
         boolean isEmpty() {
             return this.queue.size() == 0;
         }
-    }
-
-    private static void log(String str) {
-        System.out.print(str);
     }
 }
