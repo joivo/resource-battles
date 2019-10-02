@@ -1,0 +1,11 @@
+#!/bin/sh
+
+ITERATIONS=$1
+N_THREADS=$2
+MAX_VALUE=$3
+
+javac Main.java
+
+java Main ${ITERATIONS} ${N_THREADS} ${MAX_VALUE}
+
+rm -rf *.class
