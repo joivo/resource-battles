@@ -3,18 +3,20 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-void *await_exit(void *arg) {
-    sleep(1);
+void *await_exit(void *st) {
+    int sleep_time = (int) st;
+    sleep(sleep_time);
  	pthread_exit(0);
 }
 
 int main (int argc, char *argv[]) {
- 	printf("argc %d\n", argc); 
-
-	if (argc != 2) {
+	if (argc != 3) {
+        char* usage = "usage:\n./threads <n_threads> <sleep_time>\n";
+        printf(usage);
         exit(1);
     } else {               
         int n_threads = atoi(argv[1]);
+        int sleep_time = atoi(argv[2]);
         pthread_t threads[n_threads];
         
         int i;
@@ -28,8 +30,8 @@ int main (int argc, char *argv[]) {
         for (j=0; j< n_threads; j++) 
         {
             pthread_join(threads[j], (void**) &ret);
-            printf("foo %ld\n", ret);
+            printf("return %ld\n", ret);
         }
     }    
-    pthread_exit(NULL);
+    pthread_exit(NULL);    
 }
