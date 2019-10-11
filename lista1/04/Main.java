@@ -128,7 +128,7 @@ public class Main {
         /**
          * Time scheduler.
          *
-         * @param routine      the procedure that should be executed in a certain time.
+         * @param routine      the procedure that must be performed from time to time.
          * @param commitPeriod the periodic time
          */
         void schedule(final Runnable routine, int commitPeriod) {
