@@ -7,7 +7,7 @@ public class Main {
 
         CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
 
-        System.out.printf("is empty: %b", cm.isEmpty());
+        System.out.printf("%b\n", cm.isEmpty());
     }
 
     private static boolean validateArgs(String... args) {
