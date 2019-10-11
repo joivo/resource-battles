@@ -1,13 +1,13 @@
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
 
     public static void main(String[] args) {
-
-        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
-
-        System.out.printf("%b\n", cm.isEmpty());
+        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10*1000, new HashMap<>());        
     }
 
     private static boolean validateArgs(String... args) {
@@ -19,6 +19,7 @@ public class Main {
     }
 
     static class CacheMap<K, V> {
+        private static final int DEFAULT_POOL_THREAD_NUMBER = 1;
         private final int cacheSize;
         private final int timeoutSecs;
         private final Map<K, V> db;
@@ -29,6 +30,14 @@ public class Main {
             this.timeoutSecs = timeoutSecs;
             this.db = db;
             this.cache = new HashMap<>();
+            this.init();
+        }
+
+        void init() {
+            final ManagerTimer managerTimer = new ManagerTimer(
+                    Executors.newScheduledThreadPool(DEFAULT_POOL_THREAD_NUMBER));
+            final CommitterRoutine committerRoutine = new CommitterRoutine();
+            managerTimer.schedule(committerRoutine, this.timeoutSecs);
         }
 
         int size() {
@@ -91,8 +100,45 @@ public class Main {
         }
 
         private void commit() {
-            this.cache.forEach(this.db::put);
-            this.cache.clear();
+            if (!this.cache.isEmpty()) {
+                log("Commiting to the db.\n");
+                this.cache.forEach(this.db::put);
+                this.cache.clear();
+            } else {
+                log("Cache is empty, nothing to commit.\n");
+            }
+        }
+
+        class CommitterRoutine implements Runnable {
+            @Override 
+            public void run() {                
+                commit();
+            }
+        }
+    }
+
+    static class ManagerTimer {
+        private static final int DEFAULT_INITIAL_DELAY_IN_MILLI = 1000;
+        private ScheduledExecutorService executor;
+
+        ManagerTimer(ScheduledExecutorService executor) {
+            this.executor = executor;
+        }
+
+        /**
+         * Time scheduler.
+         *
+         * @param routine      the procedure that should be executed in a certain time.
+         * @param commitPeriod the periodic time
+         */
+        void schedule(final Runnable routine, int commitPeriod) {
+            executor.scheduleWithFixedDelay(() -> {
+                try {
+                    routine.run();
+                } catch (Throwable e) {
+                    log("Error in execution of the commit!");
+                }
+            }, DEFAULT_INITIAL_DELAY_IN_MILLI, commitPeriod, TimeUnit.MILLISECONDS);
         }
     }
 }
