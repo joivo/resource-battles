@@ -1,8 +1,6 @@
 import java.text.SimpleDateFormat;
 import java.time.Instant;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -18,25 +16,62 @@ public class Main {
         Date date = new java.util.Date(timestamp * 1000L);
         SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT-3"));
-        System.out.print(sdf.format(date) + " - " + str);
+        System.out.print(sdf.format(date) + " - " + str + "\n");
     }
 
     public static void main(String[] args) {
         CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10 * 1000, new HashMap<>());
+
+        exercisePut(cm);
+
+        exerciseGet(cm);
+
+        exerciseRemove(cm);
     }
 
-    static class Worker<K, V> implements Runnable {
-        private CacheMap<K, V> cache;
-        private K k;
-        private V v;
+    private static void exercisePut(CacheMap<Integer, Integer> cm) {
+        List<Thread> putWorkers = new ArrayList<>();
 
-        Worker(CacheMap<K, V> cache, K k, V v) {
-            this.cache = cache;
+        for (int i = 0; i < 100; i++) {
+            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, i, i * 100));
         }
 
-        @Override
-        public void run() {
-            this.cache.put(this.k, v);
+        executeThreads(putWorkers, cm);
+    }
+
+    private static void exerciseGet(CacheMap<Integer, Integer> cm) {
+        List<Thread> getWorkers = new ArrayList<>();
+
+        for (int i = 0; i < 100; i++) {
+            getWorkers.add(new GetWorker<>("GetWorker-" + i, cm, i));
+        }
+
+        executeThreads(getWorkers, cm);
+    }
+
+    private static void exerciseRemove(CacheMap<Integer, Integer> cm) {
+        List<Thread> removeWorkers = new ArrayList<>();
+
+        for (int i = 0; i < 100; i++) {
+            removeWorkers.add(new RemoveWorker<>("RemoveWorker-" + i, cm, i));
+        }
+
+        executeThreads(removeWorkers, cm);
+    }
+
+    private static void executeThreads(List<Thread> threads, CacheMap<Integer, Integer> cm) {
+        log("size of the cache " + cm.size());
+
+        for (int i = 0; i < 100; i++) {
+            threads.get(i).start();
+        }
+
+        for (int i = 0; i < 100; i++) {
+            try {
+                threads.get(i).join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -126,12 +161,15 @@ public class Main {
         }
 
         private synchronized void commit() {
-            if (!this.cache.isEmpty()) {
-                log("Committing to the db.\n");
+            if (cacheIsFull()) {
+                log("Committing to the db.");
                 this.cache.forEach(this.db::put);
                 this.cache.clear();
             } else {
-                log("Cache is empty, nothing to commit.\n");
+                log("Cache already has space, nothing to commit.");
+                log("Size of the cache " + this.cache.size());
+                log("Elements to full " + (this.cache.size() - this.cacheSize));
+                log("Size of the db " + this.db.size());
             }
         }
 
@@ -140,6 +178,56 @@ public class Main {
             public void run() {
                 commit();
             }
+        }
+    }
+
+    static class PutWorker<K, V> extends Thread {
+        private CacheMap<K, V> cache;
+        private K k;
+        private V v;
+
+        PutWorker(String workerName, CacheMap<K, V> cache, K k, V v) {
+            super(workerName);
+            this.cache = cache;
+            this.k = k;
+            this.v = v;
+        }
+
+        @Override
+        public void run() {
+            this.cache.put(this.k, v);
+        }
+    }
+
+    static class RemoveWorker<K, V> extends Thread {
+        private CacheMap<K, V> cache;
+        private K k;
+
+        RemoveWorker(String workerName, CacheMap<K, V> cache, K k) {
+            super(workerName);
+            this.cache = cache;
+            this.k = k;
+        }
+
+        @Override
+        public void run() {
+            this.cache.remove(this.k);
+        }
+    }
+
+    static class GetWorker<K, V> extends Thread {
+        private CacheMap<K, V> cache;
+        private K k;
+
+        GetWorker(String workerName, CacheMap<K, V> cache, K k) {
+            super(workerName);
+            this.cache = cache;
+            this.k = k;
+        }
+
+        @Override
+        public void run() {
+            this.cache.get(this.k);
         }
     }
 
