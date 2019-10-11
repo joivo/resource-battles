@@ -168,7 +168,7 @@ public class Main {
             } else {
                 log("Cache already has space, nothing to commit.");
                 log("Size of the cache " + this.cache.size());
-                log("Elements to full " + (this.cache.size() - this.cacheSize));
+                log("Available space " + (this.cacheSize - this.cache.size()));
                 log("Size of the db " + this.db.size());
             }
         }
