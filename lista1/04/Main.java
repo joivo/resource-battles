@@ -25,6 +25,21 @@ public class Main {
         CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10 * 1000, new HashMap<>());
     }
 
+    static class Worker<K, V> implements Runnable {
+        private CacheMap<K, V> cache;
+        private K k;
+        private V v;
+
+        Worker(CacheMap<K, V> cache, K k, V v) {
+            this.cache = cache;
+        }
+
+        @Override
+        public void run() {
+            this.cache.put(this.k, v);
+        }
+    }
+
     static class CacheMap<K, V> {
         private static final int DEFAULT_POOL_THREAD_NUMBER = 1;
         private final int cacheSize;
@@ -47,19 +62,19 @@ public class Main {
             managerTimer.schedule(committerRoutine, this.timeoutSecs);
         }
 
-        int size() {
+        synchronized int size() {
             return this.db.size() + this.cache.size();
         }
 
-        boolean isEmpty() {
+        synchronized boolean isEmpty() {
             return size() == 0;
         }
 
-        boolean containsKey(K k) {
+        synchronized boolean containsKey(K k) {
             return this.cache.containsKey(k) ? this.cache.containsKey(k) : this.db.containsKey(k);
         }
 
-        V get(K k) {
+        synchronized V get(K k) {
             if (this.cache.containsKey(k)) {
                 return this.cache.get(k);
             } else {
@@ -70,14 +85,14 @@ public class Main {
             return null;
         }
 
-        Object put(K k, V v) {
+        synchronized V put(K k, V v) {
             if (cacheIsFull()) {
                 commit();
             }
             return this.cache.put(k, v);
         }
 
-        V remove(K k) {
+        synchronized V remove(K k) {
             if (this.cache.containsKey(k)) {
                 return this.cache.remove(k);
             } else {
@@ -89,24 +104,28 @@ public class Main {
         }
 
         void clear() {
-            this.cache.clear();
-            this.db.clear();
+            synchronized (this) {
+                this.cache.clear();
+                this.db.clear();
+            }
         }
 
         private V putOnCache(K k) {
-            V v = this.db.remove(k);
+            synchronized (this) {
+                V v = this.db.remove(k);
 
-            if (cacheIsFull()) {
-                commit();
+                if (cacheIsFull()) {
+                    commit();
+                }
+                return this.cache.put(k, v);
             }
-            return this.cache.put(k, v);
         }
 
-        private boolean cacheIsFull() {
+        private synchronized boolean cacheIsFull() {
             return this.cache.size() == this.cacheSize;
         }
 
-        private void commit() {
+        private synchronized void commit() {
             if (!this.cache.isEmpty()) {
                 log("Committing to the db.\n");
                 this.cache.forEach(this.db::put);
@@ -136,9 +155,9 @@ public class Main {
          * Time scheduler.
          *
          * @param routine      the procedure that must be performed from time to time.
-         * @param commitPeriod the periodic time
+         * @param commitPeriod the periodic time that the routine execute.
          */
-        void schedule(final Runnable routine, int commitPeriod) {
+        void schedule(final Runnable routine, long commitPeriod) {
             executor.scheduleWithFixedDelay(() -> {
                 try {
                     routine.run();
