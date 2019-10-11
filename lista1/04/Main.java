@@ -1,3 +1,6 @@
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -6,16 +9,20 @@ import java.util.concurrent.TimeUnit;
 
 public class Main {
 
-    public static void main(String[] args) {
-        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10*1000, new HashMap<>());        
-    }
-
     private static boolean validateArgs(String... args) {
         return args.length > 0 && args.length < 3;
     }
 
     private static void log(String str) {
-        System.out.print(str);
+        long timestamp = Instant.now().getEpochSecond();
+        Date date = new java.util.Date(timestamp * 1000L);
+        SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT-3"));
+        System.out.print(sdf.format(date) + " - " + str);
+    }
+
+    public static void main(String[] args) {
+        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10 * 1000, new HashMap<>());
     }
 
     static class CacheMap<K, V> {
@@ -101,7 +108,7 @@ public class Main {
 
         private void commit() {
             if (!this.cache.isEmpty()) {
-                log("Commiting to the db.\n");
+                log("Committing to the db.\n");
                 this.cache.forEach(this.db::put);
                 this.cache.clear();
             } else {
@@ -110,8 +117,8 @@ public class Main {
         }
 
         class CommitterRoutine implements Runnable {
-            @Override 
-            public void run() {                
+            @Override
+            public void run() {
                 commit();
             }
         }
