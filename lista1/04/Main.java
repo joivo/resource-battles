@@ -1,53 +1,19 @@
-
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class Main {
 
     public static void main(String[] args) {
-        final String usage = "usage:\nsh run <cache_size> <timeout_secs> <n_threads> \n";
 
-        if (validateArgs(args)) {
-            if (args.length != 3) {
-                log(usage);
-            } else {
-                int cacheSize = Integer.parseInt(args[0]);
-                int timeoutSecs = Integer.parseInt(args[1]);
-                int nThreads = Integer.parseInt(args[2]);
+        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
 
-                CacheMap cm = new CacheMap<Integer, Integer>(cacheSize, timeoutSecs, new HashMap<>());
-
-                List<Thread> threads = new ArrayList<>();
-
-                for (int i = 0; i < nThreads; i++) {
-                    threads.add(new Thread());
-                }
-
-                for (int i = 0; i < nThreads; i++) {
-                    threads.get(i).start();
-                }
-
-                for (int i = 0; i < nThreads; i++) {
-                    try {
-                        threads.get(i).join();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-
-                System.exit(0);
-            }
-        } else {
-            log(usage);
-            System.exit(1);
-        }
+        System.out.printf("is empty: %b", cm.isEmpty());
     }
 
     private static boolean validateArgs(String... args) {
         return args.length > 0 && args.length < 3;
     }
+
     private static void log(String str) {
         System.out.print(str);
     }
@@ -55,44 +21,78 @@ public class Main {
     static class CacheMap<K, V> {
         private final int cacheSize;
         private final int timeoutSecs;
-        private final Map<K, V> dbMap;
+        private final Map<K, V> db;
+        private final Map<K, V> cache;
 
-        CacheMap(final int cacheSize, final int timeoutSecs, final Map<K, V> dbMap) {
+        CacheMap(final int cacheSize, final int timeoutSecs, final Map<K, V> db) {
             this.cacheSize = cacheSize;
             this.timeoutSecs = timeoutSecs;
-            this.dbMap = dbMap;
+            this.db = db;
+            this.cache = new HashMap<>();
         }
 
-        public int size() {
-            return 0;
+        int size() {
+            return this.db.size() + this.cache.size();
         }
 
-        public boolean isEmpty() {
-            return false;
+        boolean isEmpty() {
+            return size() == 0;
         }
 
-        public boolean containsKey(Object o) {
-            return false;
+        boolean containsKey(K k) {
+            return this.cache.containsKey(k) ? this.cache.containsKey(k) : this.db.containsKey(k);
         }
 
-        public Object get(Object o) {
-            return null;
-        }
-
-        public Object put(K o, V o2) {
-            synchronized (dbMap) {
-                this.dbMap.put(o, o2);
-                return null;
+        V get(K k) {
+            if (this.cache.containsKey(k)) {
+                return this.cache.get(k);
+            } else {
+                if (this.db.containsKey(k)) {
+                    return putOnCache(k);
+                }
             }
-        }
-
-        public Object remove(Object o) {
             return null;
         }
 
-        public void clear() {
+        Object put(K k, V v) {
+            if (cacheIsFull()) {
+                commit();
+            }
+            return this.cache.put(k, v);
+        }
 
+        V remove(K k) {
+            if (this.cache.containsKey(k)) {
+                return this.cache.remove(k);
+            } else {
+                if (this.db.containsKey(k)) {
+                    return this.db.remove(k);
+                }
+            }
+            return null;
+        }
+
+        void clear() {
+            this.cache.clear();
+            this.db.clear();
+        }
+
+        private V putOnCache(K k) {
+            V v = this.db.remove(k);
+
+            if (cacheIsFull()) {
+                commit();
+            }
+            return this.cache.put(k, v);
+        }
+
+        private boolean cacheIsFull() {
+            return this.cache.size() == this.cacheSize;
+        }
+
+        private void commit() {
+            this.cache.forEach(this.db::put);
+            this.cache.clear();
         }
     }
 }
-
