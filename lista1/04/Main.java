@@ -19,54 +19,69 @@ public class Main {
         System.out.print(sdf.format(date) + " - " + str + "\n");
     }
 
-    public static void main(String[] args) {
-        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10 * 1000, new HashMap<>());
+    public static void main(String[] args) throws InterruptedException {
+        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
+        log("" + (cm.size() == 0));
 
-        exercisePut(cm);
-
-        exerciseGet(cm);
-
-        exerciseRemove(cm);
-    }
-
-    private static void exercisePut(CacheMap<Integer, Integer> cm) {
+        Collection<Integer> items = Collections.synchronizedCollection(new LinkedList<>());
         List<Thread> putWorkers = new ArrayList<>();
+        Random random = new Random();
 
-        for (int i = 0; i < 100; i++) {
-            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, i, i * 100));
+        int nThreads = 11;
+
+        for (int i = 0; i <= nThreads; i++) {
+            Integer key = random.nextInt();
+            items.add(key);
+            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
         }
 
-        executeThreads(putWorkers, cm);
-    }
+        executeThreads(putWorkers, nThreads);
 
-    private static void exerciseGet(CacheMap<Integer, Integer> cm) {
-        List<Thread> getWorkers = new ArrayList<>();
+        log("" + (cm.size() == 11));
+        log("" + (cm.cache.size() == 1));
+        log("" + (cm.db.size() == 10));
 
-        for (int i = 0; i < 100; i++) {
-            getWorkers.add(new GetWorker<>("GetWorker-" + i, cm, i));
+        Thread.sleep(10*1000);
+
+        log("" + (cm.cache.size() == 1));
+        log("" + (cm.db.size() == 10));
+
+        Collection<Integer> items2 = Collections.synchronizedCollection(new LinkedList<>());
+        List<Thread> putWorkers2 = new ArrayList<>();        
+
+        int nThreads2 = 9;
+
+        for (int i = 0; i <= nThreads2; i++) {
+            Integer key = random.nextInt();
+            items2.add(key);
+            putWorkers2.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
         }
 
-        executeThreads(getWorkers, cm);
+        executeThreads(putWorkers2, nThreads2);
+
+        log("" + (cm.size() == 20));
+
+        log("" + (cm.cache.size() == 10));
+
+        log("" + (cm.db.size() == 10));
+
+        Thread.sleep(10*1000); 
+
+        log("" + (cm.size() == 20));
+
+        log("" + (cm.cache.size() == 0));
+
+        log("" + (cm.db.size() == 20));
+
     }
 
-    private static void exerciseRemove(CacheMap<Integer, Integer> cm) {
-        List<Thread> removeWorkers = new ArrayList<>();
+    private static void executeThreads(List<Thread> threads, int nThreads) {
 
-        for (int i = 0; i < 100; i++) {
-            removeWorkers.add(new RemoveWorker<>("RemoveWorker-" + i, cm, i));
-        }
-
-        executeThreads(removeWorkers, cm);
-    }
-
-    private static void executeThreads(List<Thread> threads, CacheMap<Integer, Integer> cm) {
-        log("size of the cache " + cm.size());
-
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < nThreads; i++) {
             threads.get(i).start();
         }
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < nThreads; i++) {
             try {
                 threads.get(i).join();
             } catch (InterruptedException e) {
@@ -75,26 +90,32 @@ public class Main {
         }
     }
 
+    /**
+     * This class describes the data structure that defines a memory cache for a given database, with a commit routine.
+     * The database supported here is a key-value DB.
+     *
+     * @param <K> The generic type of the key of the data.
+     * @param <V> The generic type of the value of the data.
+     */
     static class CacheMap<K, V> {
         private static final int DEFAULT_POOL_THREAD_NUMBER = 1;
         private final int cacheSize;
-        private final int timeoutSecs;
+        private final int timeoutMilli;
         private final Map<K, V> db;
         private final Map<K, V> cache;
 
         CacheMap(final int cacheSize, final int timeoutSecs, final Map<K, V> db) {
             this.cacheSize = cacheSize;
-            this.timeoutSecs = timeoutSecs;
+            this.timeoutMilli = timeoutSecs * 1000;
             this.db = db;
-            this.cache = new HashMap<>();
+            this.cache = new HashMap<>(cacheSize);
             this.init();
         }
 
         void init() {
             final ManagerTimer managerTimer = new ManagerTimer(
                     Executors.newScheduledThreadPool(DEFAULT_POOL_THREAD_NUMBER));
-            final CommitterRoutine committerRoutine = new CommitterRoutine();
-            managerTimer.schedule(committerRoutine, this.timeoutSecs);
+            managerTimer.schedule(new Committer(), this.timeoutMilli);
         }
 
         synchronized int size() {
@@ -109,22 +130,27 @@ public class Main {
             return this.cache.containsKey(k) ? this.cache.containsKey(k) : this.db.containsKey(k);
         }
 
-        synchronized V get(K k) {
+        synchronized V get(K k) throws InterruptedException {
             if (this.cache.containsKey(k)) {
                 return this.cache.get(k);
             } else {
                 if (this.db.containsKey(k)) {
-                    return putOnCache(k);
+                    if (!cacheIsFull()) {
+                        this.wait();
+                        return putOnCache(k);
+                    }
                 }
             }
             return null;
         }
 
-        synchronized V put(K k, V v) {
+        V put(K k, V v) {
             if (cacheIsFull()) {
                 commit();
             }
-            return this.cache.put(k, v);
+            synchronized (this.cache) {
+                return this.cache.put(k, v);
+            }
         }
 
         synchronized V remove(K k) {
@@ -145,15 +171,9 @@ public class Main {
             }
         }
 
-        private V putOnCache(K k) {
-            synchronized (this) {
-                V v = this.db.remove(k);
-
-                if (cacheIsFull()) {
-                    commit();
-                }
-                return this.cache.put(k, v);
-            }
+        private synchronized V putOnCache(K k) {
+            V v = this.db.remove(k);
+            return this.cache.put(k, v);
         }
 
         private synchronized boolean cacheIsFull() {
@@ -161,19 +181,17 @@ public class Main {
         }
 
         private synchronized void commit() {
-            if (cacheIsFull()) {
+            if (this.cache.size() > 1) {
                 log("Committing to the db.");
                 this.cache.forEach(this.db::put);
                 this.cache.clear();
+                this.notifyAll();
             } else {
                 log("Cache already has space, nothing to commit.");
-                log("Size of the cache " + this.cache.size());
-                log("Available space " + (this.cacheSize - this.cache.size()));
-                log("Size of the db " + this.db.size());
             }
         }
 
-        class CommitterRoutine implements Runnable {
+        class Committer implements Runnable {
             @Override
             public void run() {
                 commit();
@@ -199,12 +217,11 @@ public class Main {
         }
     }
 
-    static class RemoveWorker<K, V> extends Thread {
+    static class RemoveWorker<K, V> implements Runnable {
         private CacheMap<K, V> cache;
         private K k;
 
-        RemoveWorker(String workerName, CacheMap<K, V> cache, K k) {
-            super(workerName);
+        RemoveWorker(CacheMap<K, V> cache, K k) {
             this.cache = cache;
             this.k = k;
         }
@@ -215,19 +232,22 @@ public class Main {
         }
     }
 
-    static class GetWorker<K, V> extends Thread {
+    static class GetWorker<K, V> implements Runnable {
         private CacheMap<K, V> cache;
         private K k;
 
-        GetWorker(String workerName, CacheMap<K, V> cache, K k) {
-            super(workerName);
+        GetWorker(CacheMap<K, V> cache, K k) {
             this.cache = cache;
             this.k = k;
         }
 
         @Override
         public void run() {
-            this.cache.get(this.k);
+            try {
+                this.cache.get(this.k);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
