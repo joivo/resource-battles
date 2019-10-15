@@ -21,41 +21,52 @@ public class Main {
 
     public static void main(String[] args) throws InterruptedException {
         CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
-        log("" + (cm.size() == 0));
-
-        Collection<Integer> items = Collections.synchronizedCollection(new LinkedList<>());
-        List<Thread> putWorkers = new ArrayList<>();
+        Collection<Integer> keysInserted = Collections.synchronizedCollection(new LinkedList<>());
         Random random = new Random();
+
+        testPut(cm, random, keysInserted);
+
+        testGet(cm, keysInserted);
+    }
+
+    private static void testGet(CacheMap<Integer, Integer> cm, Collection<Integer> keys) {
+        log("" + (cm.isEmpty()));
+        List<Thread> getWorkers= new LinkedList<>();
+
+        for (Integer key : keys) {
+            getWorkers.add(new GetWorker<>("GetWorker-" + key, cm, key));
+        }
+
+        executeThreads(getWorkers, keys.size());
+    }
+
+    private static void testPut(CacheMap<Integer, Integer> cm, Random r, Collection<Integer> workersKeys) {
+
+        List<Thread> putWorkers = new ArrayList<>();
+        log("" + (cm.size() == 0));
 
         int nThreads = 11;
 
-        for (int i = 0; i <= nThreads; i++) {
-            Integer key = random.nextInt();
-            items.add(key);
-            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
-        }
-
+        generatePutWorkers(nThreads, r, workersKeys, putWorkers, cm);
         executeThreads(putWorkers, nThreads);
 
         log("" + (cm.size() == 11));
         log("" + (cm.cache.size() == 1));
         log("" + (cm.db.size() == 10));
 
-        Thread.sleep(10*1000);
+        try {
+            Thread.sleep(10 * 1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         log("" + (cm.cache.size() == 1));
         log("" + (cm.db.size() == 10));
 
-        Collection<Integer> items2 = Collections.synchronizedCollection(new LinkedList<>());
-        List<Thread> putWorkers2 = new ArrayList<>();        
 
         int nThreads2 = 9;
-
-        for (int i = 0; i <= nThreads2; i++) {
-            Integer key = random.nextInt();
-            items2.add(key);
-            putWorkers2.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
-        }
+        List<Thread> putWorkers2 = new ArrayList<>();
+        generatePutWorkers(nThreads2, r, workersKeys, putWorkers2, cm);
 
         executeThreads(putWorkers2, nThreads2);
 
@@ -65,14 +76,35 @@ public class Main {
 
         log("" + (cm.db.size() == 10));
 
-        Thread.sleep(10*1000); 
+        try {
+            Thread.sleep(10 * 1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         log("" + (cm.size() == 20));
 
         log("" + (cm.cache.size() == 0));
 
         log("" + (cm.db.size() == 20));
+    }
 
+    private static void generatePutWorkers(int nThreads, Random r, Collection<Integer> workersKeys,
+                                           List<Thread> putWorkers, CacheMap<Integer, Integer> cm) {
+        for (int i = 0; i <= nThreads; i++) {
+            Integer key = Math.abs(r.nextInt());
+            workersKeys.add(key);
+            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
+        }
+    }
+
+    private static void generateRemoveWorkers(int nThreads, Random r, Collection<Integer> workersKeys,
+                                           List<Thread> removeWorkers, CacheMap<Integer, Integer> cm) {
+        for (int i = 0; i <= nThreads; i++) {
+            Integer key = r.nextInt();
+            workersKeys.add(key);
+            removeWorkers.add(new PutWorker<>("RemoveWorker-" + i, cm, key, key - 1));
+        }
     }
 
     private static void executeThreads(List<Thread> threads, int nThreads) {
@@ -213,6 +245,7 @@ public class Main {
 
         @Override
         public void run() {
+            log("Worker " + this.getName()+" running.");
             this.cache.put(this.k, v);
         }
     }
@@ -232,11 +265,12 @@ public class Main {
         }
     }
 
-    static class GetWorker<K, V> implements Runnable {
+    static class GetWorker<K, V> extends Thread {
         private CacheMap<K, V> cache;
         private K k;
 
-        GetWorker(CacheMap<K, V> cache, K k) {
+        GetWorker(String workerName, CacheMap<K, V> cache, K k) {
+            super(workerName);
             this.cache = cache;
             this.k = k;
         }
@@ -244,7 +278,11 @@ public class Main {
         @Override
         public void run() {
             try {
-                this.cache.get(this.k);
+                log("Worker " + this.getName()+" running.");
+                V v = this.cache.get(this.k);
+                if (Objects.isNull(v)) {
+                    throw new RuntimeException();
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
