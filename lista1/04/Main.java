@@ -5,23 +5,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class Main {
-
-    private static boolean validateArgs(String... args) {
-        return args.length > 0 && args.length < 3;
-    }
-
-    private static void log(String str) {
-        long timestamp = Instant.now().getEpochSecond();
-        Date date = new java.util.Date(timestamp * 1000L);
-        SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-        sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT-3"));
-        System.out.print(sdf.format(date) + " - " + str + "\n");
-    }
+public class Main {    
 
     public static void main(String[] args) throws InterruptedException {
-        CacheMap<Integer, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
-        Collection<Integer> keysInserted = Collections.synchronizedCollection(new LinkedList<>());
+        CacheMap<String, Integer> cm = new CacheMap<>(10, 10, new HashMap<>());
+        Collection<String> keysInserted = Collections.synchronizedCollection(new LinkedList<>());
         Random random = new Random();
 
         testPut(cm, random, keysInserted);
@@ -29,23 +17,27 @@ public class Main {
         testGet(cm, keysInserted);
     }
 
-    private static void testGet(CacheMap<Integer, Integer> cm, Collection<Integer> keys) {
-        log("" + (cm.isEmpty()));
-        List<Thread> getWorkers= new LinkedList<>();
+    private static void testGet(CacheMap<String, Integer> cm, Collection<String> keys) {
+        log("" + (!cm.isEmpty()));
 
-        for (Integer key : keys) {
+        List<Thread> getWorkers = new LinkedList<>();
+
+        log("" + (!keys.isEmpty()));
+
+        for (String key : keys) {
             getWorkers.add(new GetWorker<>("GetWorker-" + key, cm, key));
         }
 
         executeThreads(getWorkers, keys.size());
     }
 
-    private static void testPut(CacheMap<Integer, Integer> cm, Random r, Collection<Integer> workersKeys) {
+    private static void testPut(CacheMap<String, Integer> cm, Random r, Collection<String> workersKeys) {
 
         List<Thread> putWorkers = new ArrayList<>();
         log("" + (cm.size() == 0));
 
         int nThreads = 11;
+        long waitTime = 10 * 1000;
 
         generatePutWorkers(nThreads, r, workersKeys, putWorkers, cm);
         executeThreads(putWorkers, nThreads);
@@ -55,14 +47,13 @@ public class Main {
         log("" + (cm.db.size() == 10));
 
         try {
-            Thread.sleep(10 * 1000);
+            Thread.sleep(waitTime);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
         log("" + (cm.cache.size() == 1));
         log("" + (cm.db.size() == 10));
-
 
         int nThreads2 = 9;
         List<Thread> putWorkers2 = new ArrayList<>();
@@ -77,7 +68,7 @@ public class Main {
         log("" + (cm.db.size() == 10));
 
         try {
-            Thread.sleep(10 * 1000);
+            Thread.sleep(waitTime);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -89,17 +80,18 @@ public class Main {
         log("" + (cm.db.size() == 20));
     }
 
-    private static void generatePutWorkers(int nThreads, Random r, Collection<Integer> workersKeys,
-                                           List<Thread> putWorkers, CacheMap<Integer, Integer> cm) {
+    private static void generatePutWorkers(int nThreads, Random r, Collection<String> workersKeys,
+            List<Thread> putWorkers, CacheMap<String, Integer> cm) {
         for (int i = 0; i <= nThreads; i++) {
-            Integer key = Math.abs(r.nextInt());
+            Integer value = Math.abs(r.nextInt());
+            String key = UUID.randomUUID().toString();
             workersKeys.add(key);
-            putWorkers.add(new PutWorker<>("PutWorker-" + i, cm, key, key - 1));
+            putWorkers.add(new PutWorker<String, Integer>("PutWorker-" + i, cm, key, value));
         }
     }
 
     private static void generateRemoveWorkers(int nThreads, Random r, Collection<Integer> workersKeys,
-                                           List<Thread> removeWorkers, CacheMap<Integer, Integer> cm) {
+            List<Thread> removeWorkers, CacheMap<Integer, Integer> cm) {
         for (int i = 0; i <= nThreads; i++) {
             Integer key = r.nextInt();
             workersKeys.add(key);
@@ -123,8 +115,9 @@ public class Main {
     }
 
     /**
-     * This class describes the data structure that defines a memory cache for a given database, with a commit routine.
-     * The database supported here is a key-value DB.
+     * This class describes the data structure that defines a memory cache for a
+     * given database, with a commit routine. The database supported here is a
+     * key-value DB.
      *
      * @param <K> The generic type of the key of the data.
      * @param <V> The generic type of the value of the data.
@@ -245,7 +238,7 @@ public class Main {
 
         @Override
         public void run() {
-            log("Worker " + this.getName()+" running.");
+            log("Worker " + this.getName() + " running.");
             this.cache.put(this.k, v);
         }
     }
@@ -278,7 +271,7 @@ public class Main {
         @Override
         public void run() {
             try {
-                log("Worker " + this.getName()+" running.");
+                log("Worker " + this.getName() + " running.");
                 V v = this.cache.get(this.k);
                 if (Objects.isNull(v)) {
                     throw new RuntimeException();
@@ -312,5 +305,17 @@ public class Main {
                 }
             }, DEFAULT_INITIAL_DELAY_IN_MILLI, commitPeriod, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private static boolean validateArgs(String... args) {
+        return args.length > 0 && args.length < 3;
+    }
+
+    private static void log(String str) {
+        long timestamp = Instant.now().getEpochSecond();
+        Date date = new java.util.Date(timestamp * 1000L);
+        SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT-3"));
+        System.out.print(sdf.format(date) + " - " + str + "\n");
     }
 }
