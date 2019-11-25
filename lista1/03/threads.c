@@ -23,7 +23,7 @@ int main (int argc, char *argv[]) {
         for (i=0; i < n_threads; i++) 
         {
             pthread_create(&threads[i], NULL, await_exit, NULL);
-        }        
+        }
 
         int j;
         long ret;
@@ -32,6 +32,6 @@ int main (int argc, char *argv[]) {
             pthread_join(threads[j], (void**) &ret);
             printf("return %ld\n", ret);
         }
-    }    
-    pthread_exit(NULL);    
+    }
+    exit(0);
 }

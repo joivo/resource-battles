@@ -2,15 +2,20 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/wait.h> 
 
 void create_proc(int sleep_time) { 
     
     char* cmd[] = {"sleep", "-l", (char)(sleep_time), NULL};
-    if (fork() == 0)      {
-        execv("/bin/sleep", cmd);
-        printf("return %d\n", 0);
-    } else
+    pid_t pid = fork();
+    if (pid == 0) {
+        // execv("/bin/sleep", cmd);
+        sleep(sleep_time);
+        printf("sleeping %d\n", 0);
+        exit(0);
+    } else {
         printf("");
+    }
 } 
 int main(int argc, char *argv[]) 
 { 
@@ -21,10 +26,12 @@ int main(int argc, char *argv[])
     } else { 
         int n_proc = atoi(argv[1]);
         int sleep_time = atoi(argv[2]);
-        int i;
-        for (i = 0; i < n_proc; i++) {
+        int i;      
+
+        for (i = 0; i < n_proc; i++) {            
             create_proc(sleep_time); 
-        }        
+        }
     }
+    wait(NULL);
     return 0; 
 } 
